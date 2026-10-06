@@ -1,4 +1,4 @@
-# Essuman's Cold Store Data Model
+# Gosh Cold Store Data Model
 
 This is the shared relational design for the four delivery phases now defined. The current implementation is a single business, single register deployment; the schema includes a business profile for currency, timezone, fiscal-year reporting, and receipt branding. Reports are queries/views over operational facts, not copied summary tables.
 

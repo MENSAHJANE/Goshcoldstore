@@ -44,7 +44,7 @@ export default function FinanceWorkspace({ view, products, token, preview, role,
   const [entryType, setEntryType] = useState<'income' | 'expense'>('expense')
   const [actualCash, setActualCash] = useState('')
   const [receipt, setReceipt] = useState<Sale | null>(null)
-  const [receiptProfile, setReceiptProfile] = useState<ReceiptProfile>({ businessName: "Essuman's Cold Store", businessAddress: null, businessPhone: null, businessEmail: null, logoUrl: null, receiptFooter: 'Thank you for shopping with us.', receiptQrEnabled: false, currencyCode: 'GHS', timeZone: 'Africa/Accra' })
+  const [receiptProfile, setReceiptProfile] = useState<ReceiptProfile>({ businessName: "Gosh Cold Store", businessAddress: null, businessPhone: null, businessEmail: null, logoUrl: null, receiptFooter: 'Thank you for shopping with us.', receiptQrEnabled: false, currencyCode: 'GHS', timeZone: 'Africa/Accra' })
   const [receiptSearch, setReceiptSearch] = useState('')
   const [receiptFrom, setReceiptFrom] = useState('')
   const [receiptTo, setReceiptTo] = useState('')

@@ -2,6 +2,18 @@
   display: none;
 }
 
+.user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+  min-width: 180px;
+}
+
+.user-actions .danger-action {
+  color: #a64339;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;

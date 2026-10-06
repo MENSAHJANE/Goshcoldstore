@@ -5,13 +5,16 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'attendant')),
   active BOOLEAN NOT NULL DEFAULT TRUE,
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS business_profile (
   id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  business_name TEXT NOT NULL DEFAULT 'Essuman''s Cold Store',
+  business_name TEXT NOT NULL DEFAULT 'Gosh Cold Store',
   business_address TEXT,
   business_phone TEXT,
   business_email TEXT,

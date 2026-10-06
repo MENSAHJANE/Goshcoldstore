@@ -29,6 +29,7 @@ app.use(express.json({ limit: '1mb' }))
 
 const loginSchema = z.object({ email: z.email(), password: z.string().min(1) })
 const userSchema = z.object({ name: z.string().trim().min(2), email: z.email(), password: z.string().min(10), role: z.enum(['admin', 'attendant']) })
+const userUpdateSchema = z.object({ name: z.string().trim().min(2), email: z.email(), role: z.enum(['admin', 'attendant']) })
 const productSchema = z.object({
   name: z.string().trim().min(1), category: z.string().trim().min(1), unit: z.string().trim().min(1),
   costPrice: z.number().nonnegative(), sellingPrice: z.number().nonnegative(), kiloPrice: z.number().nonnegative().default(0), kgPerCarton: z.number().positive().default(1), minimumStock: z.number().nonnegative().default(0),
@@ -179,7 +180,7 @@ app.patch('/api/auth/password', requireAuth, asyncRoute(async (request, response
 }))
 
 app.get('/api/users', requireAuth, allowRoles('admin'), asyncRoute(async (_request, response) => {
-  const users = await pool.query('SELECT id, name, email, role, active, created_at FROM users ORDER BY name')
+  const users = await pool.query('SELECT id, name, email, role, active, created_at FROM users WHERE deleted_at IS NULL ORDER BY name')
   response.json({ users: users.rows })
 }))
 
@@ -198,6 +199,70 @@ app.post('/api/users', requireAuth, allowRoles('admin'), asyncRoute(async (reque
   } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
 }))
 
+app.patch('/api/users/:id', requireAuth, allowRoles('admin'), asyncRoute(async (request, response) => {
+  const id = Number(request.params.id)
+  if (!Number.isInteger(id) || id < 1) return response.status(400).json({ error: 'A valid user id is required' })
+  const input = validated(userUpdateSchema, request.body)
+  if ('error' in input) return response.status(400).json({ error: input.error })
+  const actor = signedIn(request)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const before = await client.query('SELECT id, name, email, role, active FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE', [id])
+    if (!before.rowCount) { await client.query('ROLLBACK'); return response.status(404).json({ error: 'User not found' }) }
+    const target = before.rows[0]
+    if (id === actor.id && target.role === 'admin' && input.data.role !== 'admin') {
+      await client.query('ROLLBACK')
+      return response.status(409).json({ error: 'You cannot change your own administrator role' })
+    }
+    if (target.role === 'admin' && target.active && input.data.role !== 'admin') {
+      const admins = await client.query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND active = TRUE AND deleted_at IS NULL")
+      if (Number(admins.rows[0].count) <= 1) { await client.query('ROLLBACK'); return response.status(409).json({ error: 'The last active administrator cannot be changed to an attendant' }) }
+    }
+    const result = await client.query('UPDATE users SET name = $1, email = $2, role = $3, updated_at = NOW() WHERE id = $4 AND deleted_at IS NULL RETURNING id, name, email, role, active', [input.data.name, input.data.email.toLowerCase(), input.data.role, id])
+    await client.query('INSERT INTO audit_events (actor_user_id, actor_name_snapshot, actor_role_snapshot, action, entity_type, entity_id, summary, before_data, after_data) VALUES ($1, $2, $3, \'user.updated\', \'user\', $4, $5, $6, $7)', [actor.id, actor.name, actor.role, id, `${actor.name} updated account ${result.rows[0].email}`, target, result.rows[0]])
+    await client.query('COMMIT')
+    response.json({ user: result.rows[0] })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    if ((error as { code?: string }).code === '23505') return response.status(409).json({ error: 'A user with this email already exists' })
+    throw error
+  } finally { client.release() }
+}))
+
+app.patch('/api/users/:id/password', requireAuth, allowRoles('admin'), asyncRoute(async (request, response) => {
+  const id = Number(request.params.id)
+  if (!Number.isInteger(id) || id < 1) return response.status(400).json({ error: 'A valid user id is required' })
+  const input = z.object({ password: z.string().min(10) }).safeParse(request.body)
+  if (!input.success) return response.status(400).json({ error: 'Password must be at least 10 characters' })
+  const actor = signedIn(request)
+  const result = await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL RETURNING id, name, email', [await bcrypt.hash(input.data.password, 12), id])
+  if (!result.rowCount) return response.status(404).json({ error: 'User not found' })
+  await pool.query('INSERT INTO audit_events (actor_user_id, actor_name_snapshot, actor_role_snapshot, action, entity_type, entity_id, summary, after_data) VALUES ($1, $2, $3, \'user.password_reset\', \'user\', $4, $5, $6)', [actor.id, actor.name, actor.role, id, `${actor.name} reset the password for ${result.rows[0].email}`, { id }])
+  response.json({ message: 'User password updated' })
+}))
+
+app.delete('/api/users/:id', requireAuth, allowRoles('admin'), asyncRoute(async (request, response) => {
+  const id = Number(request.params.id)
+  const actor = signedIn(request)
+  if (!Number.isInteger(id) || id < 1 || id === actor.id) return response.status(400).json({ error: 'A valid different user id is required' })
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const before = await client.query('SELECT id, name, email, role, active FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE', [id])
+    if (!before.rowCount) { await client.query('ROLLBACK'); return response.status(404).json({ error: 'User not found' }) }
+    const target = before.rows[0]
+    if (target.role === 'admin' && target.active) {
+      const admins = await client.query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND active = TRUE AND deleted_at IS NULL")
+      if (Number(admins.rows[0].count) <= 1) { await client.query('ROLLBACK'); return response.status(409).json({ error: 'The last active administrator cannot be deleted' }) }
+    }
+    await client.query('UPDATE users SET active = FALSE, deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [id])
+    await client.query('INSERT INTO audit_events (actor_user_id, actor_name_snapshot, actor_role_snapshot, action, entity_type, entity_id, summary, before_data) VALUES ($1, $2, $3, \'user.deleted\', \'user\', $4, $5, $6)', [actor.id, actor.name, actor.role, id, `${actor.name} deleted account ${target.email}`, target])
+    await client.query('COMMIT')
+    response.json({ message: 'User deleted' })
+  } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
+}))
+
 app.patch('/api/users/:id/active', requireAuth, allowRoles('admin'), asyncRoute(async (request, response) => {
   const id = Number(request.params.id)
   if (!Number.isInteger(id) || id < 1 || id === signedIn(request).id) return response.status(400).json({ error: 'A valid different user id is required' })
@@ -205,7 +270,13 @@ app.patch('/api/users/:id/active', requireAuth, allowRoles('admin'), asyncRoute(
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const result = await client.query('UPDATE users SET active = NOT active, updated_at = NOW() WHERE id = $1 RETURNING id, name, email, role, active', [id])
+    const current = await client.query('SELECT id, role, active FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE', [id])
+    if (!current.rowCount) { await client.query('ROLLBACK'); return response.status(404).json({ error: 'User not found' }) }
+    if (current.rows[0].role === 'admin' && current.rows[0].active) {
+      const admins = await client.query("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND active = TRUE AND deleted_at IS NULL")
+      if (Number(admins.rows[0].count) <= 1) { await client.query('ROLLBACK'); return response.status(409).json({ error: 'The last active administrator cannot be disabled' }) }
+    }
+    const result = await client.query('UPDATE users SET active = NOT active, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING id, name, email, role, active', [id])
     if (!result.rowCount) { await client.query('ROLLBACK'); return response.status(404).json({ error: 'User not found' }) }
     await client.query('INSERT INTO audit_events (actor_user_id, actor_name_snapshot, actor_role_snapshot, action, entity_type, entity_id, summary, after_data) VALUES ($1, $2, $3, \'user.status_changed\', \'user\', $4, $5, $6)', [actor.id, actor.name, actor.role, id, `${actor.name} ${result.rows[0].active ? 'enabled' : 'disabled'} user ${result.rows[0].email}`, result.rows[0]])
     await client.query('COMMIT')
@@ -699,4 +770,4 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
   response.status(500).json({ error: 'Internal server error' })
 })
 
-app.listen(port, () => console.info(`Essuman's Cold Store API listening on http://localhost:${port}`))
+app.listen(port, () => console.info(`Gosh Cold Store API listening on http://localhost:${port}`))

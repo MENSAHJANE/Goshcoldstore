@@ -1,4 +1,4 @@
-# Essuman's Cold Store
+# Gosh Cold Store
 
 The system follows four development phases: Phase 1 Foundation & Inventory; Phase 2 Sales, Cash Tally & Finance; Phase 3 Reports, Profit/Loss & Business Intelligence; Phase 4 Receipt & Printing. The client is React, TypeScript and Vite; the API is Express; PostgreSQL holds the shared operational data and receipt snapshots.
 

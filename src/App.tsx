@@ -80,8 +80,9 @@ function App() {
   const [activeView, setActiveView] = useState('Overview')
   const [products, setProducts] = useState<Product[]>([])
   const [movements, setMovements] = useState<Movement[]>([])
-  const [modal, setModal] = useState<'product' | 'edit' | 'receive' | 'adjust' | 'user' | 'password' | null>(null)
+  const [modal, setModal] = useState<'product' | 'edit' | 'receive' | 'adjust' | 'user' | 'password' | 'edit-user' | 'reset-user-password' | null>(null)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
+  const [managedUser, setManagedUser] = useState<SessionUser | null>(null)
   const [notice, setNotice] = useState('')
   const [role, setRole] = useState<'Admin' | 'Shop Attendant'>('Admin')
   const [token, setToken] = useState(() => localStorage.getItem('essumans-cold-store-token') || localStorage.getItem('frostline-token') || '')
@@ -220,6 +221,43 @@ function App() {
     }
   }
 
+  async function saveManagedUser(formData: FormData) {
+    if (!token || !managedUser) return
+    try {
+      await apiRequest(`/api/users/${managedUser.id}`, token, { method: 'PATCH', body: JSON.stringify(Object.fromEntries(formData)) })
+      const result = await apiRequest<{ users: Array<SessionUser & { active: boolean }> }>('/api/users', token)
+      setUsers(result.users)
+      setModal(null)
+      setManagedUser(null)
+      showNotice('User account updated')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to update user')
+    }
+  }
+
+  async function resetManagedUserPassword(formData: FormData) {
+    if (!token || !managedUser) return
+    try {
+      await apiRequest(`/api/users/${managedUser.id}/password`, token, { method: 'PATCH', body: JSON.stringify(Object.fromEntries(formData)) })
+      setModal(null)
+      setManagedUser(null)
+      showNotice('User password updated')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to update user password')
+    }
+  }
+
+  async function deleteManagedUser(target: SessionUser) {
+    if (!token || !window.confirm(`Delete ${target.name}'s account? They will no longer be able to sign in.`)) return
+    try {
+      await apiRequest(`/api/users/${target.id}`, token, { method: 'DELETE' })
+      setUsers((current) => current.filter((item) => item.id !== target.id))
+      showNotice('User account deleted')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to delete user')
+    }
+  }
+
   function applyPreviewSale(items: Array<{ productId: number; productName: string; quantity: number; stockQuantity?: number }>) {
     setProducts((current) => current.map((product) => {
       const sold = items.filter((item) => item.productId === product.id).reduce((sum, item) => sum + (item.stockQuantity ?? item.quantity), 0)
@@ -290,9 +328,9 @@ function App() {
     }
   }, [authStatus])
 
-  if (authStatus === 'loading' && !preview) return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">E</span><h1>Essuman's Cold Store</h1><p>Connecting to your store...</p></div></div>
+  if (authStatus === 'loading' && !preview) return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">G</span><h1>Gosh Cold Store</h1><p>Connecting to your store...</p></div></div>
 
-  if (authStatus !== 'authenticated' && !preview) return <main className="auth-screen"><section className="auth-card"><a className="brand auth-brand" href="#login"><span className="brand-mark">E</span><span>ESSUMAN'S <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span></a><span className="eyebrow">ACCRA · COLD STORE</span><h1>{authStatus === 'setup' ? 'Set up your store' : 'Welcome back'}</h1><p className="auth-subtitle">{authStatus === 'setup' ? 'Create the first administrator account to secure your inventory.' : 'Sign in to manage your store inventory.'}</p><form action={(data) => void authenticate(data)}>{authStatus === 'setup' && <label>Your name<input name="name" autoComplete="name" required minLength={2} placeholder="Store administrator" /></label>}<label>Email address<input name="email" type="email" autoComplete="username" required placeholder="you@yourstore.com" /></label><label>Password<input name="password" type="password" autoComplete={authStatus === 'setup' ? 'new-password' : 'current-password'} minLength={authStatus === 'setup' ? 10 : 1} required placeholder={authStatus === 'setup' ? 'At least 10 characters' : 'Your password'} /></label>{authError && <p className="auth-error" role="alert">{authError}</p>}<button className="button button-primary auth-submit" type="submit">{authStatus === 'setup' ? 'Create administrator' : 'Sign in'} <span>→</span></button></form></section><p className="auth-footer">Secure inventory management · Phase 1</p></main>
+  if (authStatus !== 'authenticated' && !preview) return <main className="auth-screen"><section className="auth-card"><a className="brand auth-brand" href="#login"><span className="brand-mark">G</span><span>GOSH <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span></a><span className="eyebrow">ACCRA · COLD STORE</span><h1>{authStatus === 'setup' ? 'Set up your store' : 'Welcome back'}</h1><p className="auth-subtitle">{authStatus === 'setup' ? 'Create the first administrator account to secure your inventory.' : 'Sign in to manage your store inventory.'}</p><form action={(data) => void authenticate(data)}>{authStatus === 'setup' && <label>Your name<input name="name" autoComplete="name" required minLength={2} placeholder="Store administrator" /></label>}<label>Email address<input name="email" type="email" autoComplete="username" required placeholder="you@yourstore.com" /></label><label>Password<input name="password" type="password" autoComplete={authStatus === 'setup' ? 'new-password' : 'current-password'} minLength={authStatus === 'setup' ? 10 : 1} required placeholder={authStatus === 'setup' ? 'At least 10 characters' : 'Your password'} /></label>{authError && <p className="auth-error" role="alert">{authError}</p>}<button className="button button-primary auth-submit" type="submit">{authStatus === 'setup' ? 'Create administrator' : 'Sign in'} <span>→</span></button></form></section><p className="auth-footer">© {new Date().getFullYear()} Gosh Cold Store. All rights reserved.</p></main>
 
   async function submitProduct(formData: FormData) {
     const name = String(formData.get('name') || '').trim()
@@ -352,9 +390,9 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <a className="brand" href="#overview" onClick={() => setActiveView('Overview')}>
-          <span className="brand-mark">E</span><span>ESSUMAN'S <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span>
+          <span className="brand-mark">G</span><span>GOSH <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span>
         </a>
-        <div className="store-switch"><span className="store-avatar">E</span><span><strong>Essuman's Cold Store</strong><small>Cold store · Accra</small></span><span className="chevron">⌄</span></div>
+        <div className="store-switch"><span className="store-avatar">G</span><span><strong>Gosh Cold Store</strong><small>Cold store · Accra</small></span><span className="chevron">⌄</span></div>
         <span className="nav-label">WORKSPACE</span>
         <nav className="primary-nav" aria-label="Main navigation">
           {[
@@ -369,7 +407,7 @@ function App() {
       </aside>
 
       <main className="main-panel">
-        <header className="topbar"><div className="breadcrumbs"><span>Essuman's Cold Store</span><span>/</span><strong>{activeView}</strong>{preview && <span className="preview-badge">PREVIEW</span>}</div><div className="top-actions"><span className="today-label">{topbarDate}</span><button className="icon-button notification-button" title="Notifications" aria-label="Notifications" onClick={() => showNotice(`${lowStock.length} products need attention`)}>♧{lowStock.length > 0 && <i />}</button><span className="top-avatar">{user ? user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() : 'AM'}</span></div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>Gosh Cold Store</span><span>/</span><strong>{activeView}</strong>{preview && <span className="preview-badge">PREVIEW</span>}</div><div className="top-actions"><span className="today-label">{topbarDate}</span><button className="icon-button notification-button" title="Notifications" aria-label="Notifications" onClick={() => showNotice(`${lowStock.length} products need attention`)}>♧{lowStock.length > 0 && <i />}</button><span className="top-avatar">{user ? user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() : 'AM'}</span></div></header>
         <div className="page-content">
           <div className="welcome-row"><div><p className="eyebrow">{eyebrowDate} <span className="live-dot" /> STORE OPEN</p><h1>{currentView}</h1><p className="page-subtitle">Here’s what’s happening at your store today.</p></div>{['Overview', 'Products', 'Stock'].includes(activeView) && <div className="action-row"><button className="button button-secondary" onClick={() => setModal('adjust')}><span>⇄</span> Adjust stock</button>{currentRole === 'Admin' && <button className="button button-primary" onClick={() => { setEditProduct(null); setModal('product') }}><span>＋</span> Add product</button>}</div>}</div>
 
@@ -400,11 +438,11 @@ function App() {
 
           {activeView === 'History' && <section className="panel data-panel"><div className="panel-heading"><div><h2>Stock history</h2><p>Goods received and manual adjustments</p></div><button className="button button-small button-primary" onClick={() => setModal('receive')}>＋ Receive goods</button></div><MovementTable movements={movements} /></section>}
 
-          {activeView === 'Users' && <section className="panel data-panel"><div className="panel-heading"><div><h2>Store users</h2><p>Administrator and shop attendant access</p></div>{!preview && <button className="button button-small button-primary" onClick={() => setModal('user')}>＋ Add user</button>}</div>{preview ? <div className="empty-state">User administration requires a signed-in administrator account.</div> : <div className="table-scroll"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>STATUS</th><th /></tr></thead><tbody>{users.map((item) => <tr key={item.id}><td><strong>{item.name}</strong></td><td>{item.email}</td><td>{item.role === 'admin' ? 'Administrator' : 'Shop Attendant'}</td><td><span className={`status-tag ${item.active ? 'status-active' : 'status-inactive'}`}>{item.active ? 'Active' : 'Inactive'}</span></td><td>{user?.id !== item.id && <button className="row-action" onClick={() => void toggleUserStatus(item.id)}>{item.active ? 'Disable' : 'Enable'}</button>}</td></tr>)}</tbody></table>{users.length === 0 && <div className="empty-state">No users found.</div>}</div>}</section>}
+          {activeView === 'Users' && <section className="panel data-panel"><div className="panel-heading"><div><h2>Store users</h2><p>Administrator and shop attendant access</p></div>{!preview && <button className="button button-small button-primary" onClick={() => setModal('user')}>＋ Add user</button>}</div>{preview ? <div className="empty-state">User administration requires a signed-in administrator account.</div> : <div className="table-scroll"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{users.map((item) => <tr key={item.id}><td><strong>{item.name}</strong></td><td>{item.email}</td><td>{item.role === 'admin' ? 'Administrator' : 'Shop Attendant'}</td><td><span className={`status-tag ${item.active ? 'status-active' : 'status-inactive'}`}>{item.active ? 'Active' : 'Inactive'}</span></td><td><div className="user-actions"><button className="row-action" onClick={() => { setManagedUser(item); setModal('edit-user') }}>Edit</button><button className="row-action" onClick={() => { setManagedUser(item); setModal('reset-user-password') }}>Reset password</button>{user?.id !== item.id && <><button className="row-action" onClick={() => void toggleUserStatus(item.id)}>{item.active ? 'Disable' : 'Enable'}</button><button className="row-action danger-action" onClick={() => void deleteManagedUser(item)}>Delete</button></>}</div></td></tr>)}</tbody></table>{users.length === 0 && <div className="empty-state">No users found.</div>}</div>}</section>}
 
           <FinanceWorkspace view={activeView} products={products} token={token} preview={preview} role={user?.role ?? 'admin'} userId={user?.id ?? 0} userName={user?.name ?? 'Sample account'} onInventoryChanged={() => void refreshApiInventory()} onPreviewSale={applyPreviewSale} onPreviewReversal={reversePreviewSale} onFinanceChanged={() => { if (token && !preview) void apiRequest<DashboardData>('/api/dashboard', token).then(setDashboard).catch(() => undefined) }} onNavigate={setActiveView} onNotice={showNotice} />
 
-          <footer className="page-footer"><span>Essuman's Cold Store inventory</span><span>Phase 2 · Daily operations & finance</span></footer>
+          <footer className="page-footer"><span>© {new Date().getFullYear()} Gosh Cold Store. All rights reserved.</span></footer>
         </div>
       </main>
 
@@ -418,6 +456,8 @@ function App() {
           {modal === 'product' || modal === 'edit' ? <form action={(data) => submitProduct(data)}><label>Product name<input name="name" required defaultValue={editProduct?.name ?? ''} placeholder="e.g. Frozen chicken breast" /></label><div className="form-grid"><label>Category<input name="category" required defaultValue={editProduct?.category ?? ''} placeholder="e.g. Poultry" /></label><label>Stock unit<select name="unit" defaultValue={editProduct?.unit ?? 'carton'}><option>carton</option><option>piece</option><option>kg</option><option>pack</option><option>tub</option><option>bag</option></select></label><label>Carton cost<input name="cost" type="number" min="0" step="0.01" required defaultValue={editProduct?.cost ?? ''} placeholder="0.00" /></label><label>Carton price<input name="price" type="number" min="0" step="0.01" required defaultValue={editProduct?.price ?? ''} placeholder="600.00" /></label><label>Kilo price<input name="kiloPrice" type="number" min="0" step="0.01" required defaultValue={editProduct?.kiloPrice ?? editProduct?.price ?? ''} placeholder="35.00" /></label><label>Kilos per carton<input name="kgPerCarton" type="number" min="0.001" step="0.001" required defaultValue={editProduct?.kgPerCarton ?? 1} placeholder="18" /></label>{modal === 'product' && <label>Opening stock<input name="stock" type="number" min="0" step="0.001" defaultValue="0" /></label>}<label>Minimum stock level<input name="minimum" type="number" min="0" step="0.001" defaultValue={editProduct?.minimum ?? 0} /></label></div><ModalButtons onCancel={() => { setModal(null); setEditProduct(null) }} action={modal === 'edit' ? 'Save changes' : 'Save product'} /></form> : <form action={(data) => submitMovement(data, modal === 'receive' ? 'Goods received' : 'Adjustment')}><label>Product<select name="product" required>{products.map((product) => <option value={product.id} key={product.id}>{product.name} · {product.stock} {product.unit} in stock</option>)}</select></label><div className="form-grid"><label>{modal === 'receive' ? 'Quantity received' : 'Quantity to adjust'}<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="0" /></label>{modal === 'receive' ? <label>Purchase cost per unit<input name="cost" type="number" min="0" step="0.01" required placeholder="0.00" /></label> : <label>Adjustment type<select name="direction"><option value="add">Add stock</option><option value="remove">Remove stock</option></select></label>}</div>{modal === 'receive' && <label>Supplier<input name="supplier" required placeholder="Supplier name" /></label>}{modal === 'adjust' && <label>Reason<input name="supplier" required placeholder="e.g. Damaged goods, stock count" /></label>}<ModalButtons onCancel={() => setModal(null)} action={modal === 'receive' ? 'Record delivery' : 'Save adjustment'} /></form>}
       </section></div>}
       {modal === 'user' && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null) }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title"><div className="modal-heading"><div><span className="eyebrow">ACCESS CONTROL</span><h2 id="account-modal-title">Add store user</h2></div><button className="icon-button" onClick={() => setModal(null)} aria-label="Close dialog">×</button></div><form action={(data) => void submitUser(data)}><label>Full name<input name="name" required minLength={2} placeholder="Staff member name" /></label><label>Email address<input name="email" type="email" required placeholder="staff@yourstore.com" /></label><label>Temporary password<input name="password" type="password" minLength={10} required placeholder="At least 10 characters" /></label><label>Role<select name="role"><option value="attendant">Shop Attendant</option><option value="admin">Administrator</option></select></label><ModalButtons onCancel={() => setModal(null)} action="Create account" /></form></section></div>}
+      {modal === 'edit-user' && managedUser && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setModal(null); setManagedUser(null) } }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-user-title"><div className="modal-heading"><div><span className="eyebrow">ACCESS CONTROL</span><h2 id="edit-user-title">Edit user</h2></div><button className="icon-button" onClick={() => { setModal(null); setManagedUser(null) }} aria-label="Close dialog">×</button></div><form action={(data) => void saveManagedUser(data)}><label>Full name<input name="name" required minLength={2} defaultValue={managedUser.name} /></label><label>Email address<input name="email" type="email" required defaultValue={managedUser.email} /></label><label>Role<select name="role" defaultValue={managedUser.role}><option value="attendant">Shop Attendant</option><option value="admin">Administrator</option></select></label><ModalButtons onCancel={() => { setModal(null); setManagedUser(null) }} action="Save changes" /></form></section></div>}
+      {modal === 'reset-user-password' && managedUser && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) { setModal(null); setManagedUser(null) } }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="reset-user-password-title"><div className="modal-heading"><div><span className="eyebrow">ACCESS CONTROL</span><h2 id="reset-user-password-title">Reset password</h2><p>{managedUser.name} · {managedUser.email}</p></div><button className="icon-button" onClick={() => { setModal(null); setManagedUser(null) }} aria-label="Close dialog">×</button></div><form action={(data) => void resetManagedUserPassword(data)}><label>New password<input name="password" type="password" autoComplete="new-password" minLength={10} required placeholder="At least 10 characters" /></label><ModalButtons onCancel={() => { setModal(null); setManagedUser(null) }} action="Update password" /></form></section></div>}
       {modal === 'password' && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null) }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="password-modal-title"><div className="modal-heading"><div><span className="eyebrow">ACCOUNT SECURITY</span><h2 id="password-modal-title">Change password</h2></div><button className="icon-button" onClick={() => setModal(null)} aria-label="Close dialog">×</button></div><form action={(data) => void submitPassword(data)}><label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required /></label><label>New password<input name="newPassword" type="password" autoComplete="new-password" minLength={10} required placeholder="At least 10 characters" /></label><ModalButtons onCancel={() => setModal(null)} action="Update password" /></form><div className="account-signout"><span>{user?.email}</span><button className="row-action" onClick={signOut}>Sign out</button></div></section></div>}
     </div>
   )
