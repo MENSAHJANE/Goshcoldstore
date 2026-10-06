@@ -11,6 +11,9 @@ import { pool, type AuthenticatedRequest } from './db.js'
 const app = express()
 const port = Number(process.env.API_PORT || 4000)
 const allowedOrigins = new Set((process.env.CLIENT_ORIGIN || 'http://localhost:5173,http://127.0.0.1:4173,http://127.0.0.1:4174').split(',').map((origin) => origin.trim()).filter(Boolean))
+if (process.env.NODE_ENV !== 'production') {
+  for (const origin of ['http://localhost:4173', 'http://127.0.0.1:4173', 'http://127.0.0.1:4174']) allowedOrigins.add(origin)
+}
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const distPath = path.resolve(__dirname, '../dist')

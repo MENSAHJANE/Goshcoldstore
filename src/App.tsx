@@ -3,6 +3,7 @@ import FinanceWorkspace from './FinanceWorkspace.tsx'
 import { parseApiResponse } from './api.ts'
 import './App.css'
 import './dashboard.css'
+import './mobile.css'
 
 const InventoryChart = lazy(() => import('./InventoryChart.tsx'))
 
@@ -29,21 +30,9 @@ type Movement = {
   date: string
 }
 
-const initialProducts: Product[] = [
-  { id: 1, name: 'Frozen Chicken 1kg', category: 'Poultry', unit: 'carton', stock: 42, minimum: 12, cost: 420, price: 600, kiloPrice: 35, kgPerCarton: 18, status: 'Active' },
-  { id: 2, name: 'Tilapia Fillet', category: 'Seafood', unit: 'carton', stock: 8, minimum: 10, cost: 420, price: 600, kiloPrice: 35, kgPerCarton: 18, status: 'Active' },
-  { id: 3, name: 'Beef Sausages', category: 'Meat', unit: 'pack', stock: 26, minimum: 8, cost: 4.2, price: 6.5, kiloPrice: 6.5, kgPerCarton: 1, status: 'Active' },
-  { id: 4, name: 'Vanilla Ice Cream', category: 'Desserts', unit: 'tub', stock: 5, minimum: 6, cost: 9, price: 13, kiloPrice: 13, kgPerCarton: 1, status: 'Active' },
-  { id: 5, name: 'Frozen Peas', category: 'Vegetables', unit: 'carton', stock: 31, minimum: 10, cost: 420, price: 600, kiloPrice: 35, kgPerCarton: 18, status: 'Active' },
-]
-
-const initialMovements: Movement[] = [
-  { id: 1, product: 'Frozen Chicken 1kg', kind: 'Goods received', quantity: 24, supplier: 'Northstar Foods', date: 'Today, 09:42' },
-  { id: 2, product: 'Tilapia Fillet', kind: 'Adjustment', quantity: -2, supplier: 'Stock count', date: 'Today, 08:15' },
-  { id: 3, product: 'Beef Sausages', kind: 'Goods received', quantity: 12, supplier: 'Farm & Sea Ltd', date: 'Yesterday' },
-]
-
 const today = new Date()
+const inactivityLimit = 2 * 60 * 60 * 1000
+const lastActivityKey = 'essumans-cold-store-last-activity'
 const topbarDate = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(today)
 const eyebrowDate = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(today).toUpperCase()
 const money = (value: number) => `GH₵ ${value.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -89,8 +78,8 @@ async function loadApiInventory(token: string) {
 
 function App() {
   const [activeView, setActiveView] = useState('Overview')
-  const [products, setProducts] = useState(initialProducts)
-  const [movements, setMovements] = useState(initialMovements)
+  const [products, setProducts] = useState<Product[]>([])
+  const [movements, setMovements] = useState<Movement[]>([])
   const [modal, setModal] = useState<'product' | 'edit' | 'receive' | 'adjust' | 'user' | 'password' | null>(null)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [notice, setNotice] = useState('')
@@ -98,7 +87,7 @@ function App() {
   const [token, setToken] = useState(() => localStorage.getItem('essumans-cold-store-token') || localStorage.getItem('frostline-token') || '')
   const [user, setUser] = useState<SessionUser | null>(null)
   const [users, setUsers] = useState<Array<SessionUser & { active: boolean }>>([])
-  const [dashboard, setDashboard] = useState<DashboardData>({ totalProducts: 0, currentStock: 0, lowStockCount: 0, todayPurchases: 912.5, todaySales: null, todayExpenses: null, currentProfit: null })
+  const [dashboard, setDashboard] = useState<DashboardData>({ totalProducts: 0, currentStock: 0, lowStockCount: 0, todayPurchases: 0, todaySales: null, todayExpenses: null, currentProfit: null })
   const [authStatus, setAuthStatus] = useState<'loading' | 'login' | 'setup' | 'authenticated'>('loading')
   const [authError, setAuthError] = useState('')
   const [preview, setPreview] = useState(false)
@@ -127,7 +116,10 @@ function App() {
           return
         }
         const result = await apiRequest<{ needsSetup: boolean }>('/api/auth/setup')
-        if (!cancelled) setAuthStatus(result.needsSetup ? 'setup' : 'login')
+        if (!cancelled) {
+          setAuthError('')
+          setAuthStatus(result.needsSetup ? 'setup' : 'login')
+        }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : 'Unable to reach the store API'
@@ -152,6 +144,7 @@ function App() {
       const path = isSetup ? '/api/auth/bootstrap' : '/api/auth/login'
       const result = await apiRequest<{ token: string; user: SessionUser }>(path, undefined, { method: 'POST', body: JSON.stringify(Object.fromEntries(formData)) })
       localStorage.setItem('essumans-cold-store-token', result.token)
+      localStorage.setItem(lastActivityKey, String(Date.now()))
       localStorage.removeItem('frostline-token')
       setUser(result.user)
       setToken(result.token)
@@ -246,15 +239,60 @@ function App() {
   function signOut() {
     localStorage.removeItem('essumans-cold-store-token')
     localStorage.removeItem('frostline-token')
+    localStorage.removeItem(lastActivityKey)
     setToken('')
     setUser(null)
     setPreview(false)
     setAuthStatus('login')
   }
 
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return
+
+    let lastActivity = Number(localStorage.getItem(lastActivityKey)) || Date.now()
+    let timer = 0
+    const checkInactivity = () => {
+      const remaining = inactivityLimit - (Date.now() - lastActivity)
+      if (remaining <= 0) {
+        signOut()
+        setAuthError('You were signed out after 2 hours of inactivity.')
+        return
+      }
+      timer = window.setTimeout(checkInactivity, remaining)
+    }
+    const recordActivity = () => {
+      lastActivity = Date.now()
+      localStorage.setItem(lastActivityKey, String(lastActivity))
+      window.clearTimeout(timer)
+      timer = window.setTimeout(checkInactivity, inactivityLimit)
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === lastActivityKey && event.newValue) {
+        lastActivity = Math.max(lastActivity, Number(event.newValue) || 0)
+        window.clearTimeout(timer)
+        timer = window.setTimeout(checkInactivity, Math.max(0, inactivityLimit - (Date.now() - lastActivity)))
+      }
+    }
+
+    checkInactivity()
+    window.addEventListener('pointerdown', recordActivity)
+    window.addEventListener('keydown', recordActivity)
+    window.addEventListener('wheel', recordActivity, { passive: true })
+    window.addEventListener('touchstart', recordActivity, { passive: true })
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pointerdown', recordActivity)
+      window.removeEventListener('keydown', recordActivity)
+      window.removeEventListener('wheel', recordActivity)
+      window.removeEventListener('touchstart', recordActivity)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [authStatus])
+
   if (authStatus === 'loading' && !preview) return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">E</span><h1>Essuman's Cold Store</h1><p>Connecting to your store...</p></div></div>
 
-  if (authStatus !== 'authenticated' && !preview) return <main className="auth-screen"><section className="auth-card"><a className="brand auth-brand" href="#login"><span className="brand-mark">E</span><span>ESSUMAN'S <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span></a><span className="eyebrow">ACCRA · COLD STORE</span><h1>{authStatus === 'setup' ? 'Set up your store' : 'Welcome back'}</h1><p className="auth-subtitle">{authStatus === 'setup' ? 'Create the first administrator account to secure your inventory.' : 'Sign in to manage your store inventory.'}</p><form action={(data) => void authenticate(data)}>{authStatus === 'setup' && <label>Your name<input name="name" autoComplete="name" required minLength={2} placeholder="Store administrator" /></label>}<label>Email address<input name="email" type="email" autoComplete="username" required placeholder="you@yourstore.com" /></label><label>Password<input name="password" type="password" autoComplete={authStatus === 'setup' ? 'new-password' : 'current-password'} minLength={authStatus === 'setup' ? 10 : 1} required placeholder={authStatus === 'setup' ? 'At least 10 characters' : 'Your password'} /></label>{authError && <p className="auth-error" role="alert">{authError}</p>}<button className="button button-primary auth-submit" type="submit">{authStatus === 'setup' ? 'Create administrator' : 'Sign in'} <span>→</span></button></form><button className="preview-link" onClick={() => setPreview(true)}>Preview sample dashboard</button></section><p className="auth-footer">Secure inventory management · Phase 1</p></main>
+  if (authStatus !== 'authenticated' && !preview) return <main className="auth-screen"><section className="auth-card"><a className="brand auth-brand" href="#login"><span className="brand-mark">E</span><span>ESSUMAN'S <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span></a><span className="eyebrow">ACCRA · COLD STORE</span><h1>{authStatus === 'setup' ? 'Set up your store' : 'Welcome back'}</h1><p className="auth-subtitle">{authStatus === 'setup' ? 'Create the first administrator account to secure your inventory.' : 'Sign in to manage your store inventory.'}</p><form action={(data) => void authenticate(data)}>{authStatus === 'setup' && <label>Your name<input name="name" autoComplete="name" required minLength={2} placeholder="Store administrator" /></label>}<label>Email address<input name="email" type="email" autoComplete="username" required placeholder="you@yourstore.com" /></label><label>Password<input name="password" type="password" autoComplete={authStatus === 'setup' ? 'new-password' : 'current-password'} minLength={authStatus === 'setup' ? 10 : 1} required placeholder={authStatus === 'setup' ? 'At least 10 characters' : 'Your password'} /></label>{authError && <p className="auth-error" role="alert">{authError}</p>}<button className="button button-primary auth-submit" type="submit">{authStatus === 'setup' ? 'Create administrator' : 'Sign in'} <span>→</span></button></form></section><p className="auth-footer">Secure inventory management · Phase 1</p></main>
 
   async function submitProduct(formData: FormData) {
     const name = String(formData.get('name') || '').trim()
