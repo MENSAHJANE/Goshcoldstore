@@ -91,6 +91,7 @@ function App() {
   const [dashboard, setDashboard] = useState<DashboardData>({ totalProducts: 0, currentStock: 0, lowStockCount: 0, todayPurchases: 0, todaySales: null, todayExpenses: null, currentProfit: null })
   const [authStatus, setAuthStatus] = useState<'loading' | 'login' | 'setup' | 'authenticated'>('loading')
   const [authError, setAuthError] = useState('')
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [preview, setPreview] = useState(false)
   const currentRole = user ? (user.role === 'admin' ? 'Admin' : 'Shop Attendant') : role
   const activeProducts = products.filter((product) => product.status === 'Active')
@@ -139,6 +140,7 @@ function App() {
   }, [token])
 
   async function authenticate(formData: FormData) {
+    setIsAuthenticating(true)
     setAuthError('')
     try {
       const isSetup = authStatus === 'setup'
@@ -160,6 +162,8 @@ function App() {
       setAuthStatus('authenticated')
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Unable to sign in')
+    } finally {
+      setIsAuthenticating(false)
     }
   }
 
@@ -330,7 +334,7 @@ function App() {
 
   if (authStatus === 'loading' && !preview) return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">G</span><h1>Gosh Cold Store</h1><p>Connecting to your store...</p></div></div>
 
-  if (authStatus !== 'authenticated' && !preview) return <main className="auth-screen"><section className="auth-card"><a className="brand auth-brand" href="#login"><span className="brand-mark">G</span><span>GOSH <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span></a><span className="eyebrow">ACCRA · COLD STORE</span><h1>{authStatus === 'setup' ? 'Set up your store' : 'Welcome back'}</h1><p className="auth-subtitle">{authStatus === 'setup' ? 'Create the first administrator account to secure your inventory.' : 'Sign in to manage your store inventory.'}</p><form action={(data) => void authenticate(data)}>{authStatus === 'setup' && <label>Your name<input name="name" autoComplete="name" required minLength={2} placeholder="Store administrator" /></label>}<label>Email address<input name="email" type="email" autoComplete="username" required placeholder="you@yourstore.com" /></label><label>Password<input name="password" type="password" autoComplete={authStatus === 'setup' ? 'new-password' : 'current-password'} minLength={authStatus === 'setup' ? 10 : 1} required placeholder={authStatus === 'setup' ? 'At least 10 characters' : 'Your password'} /></label>{authError && <p className="auth-error" role="alert">{authError}</p>}<button className="button button-primary auth-submit" type="submit">{authStatus === 'setup' ? 'Create administrator' : 'Sign in'} <span>→</span></button></form></section><p className="auth-footer">© {new Date().getFullYear()} Gosh Cold Store. All rights reserved.</p></main>
+  if (authStatus !== 'authenticated' && !preview) return <main className="auth-screen"><section className="auth-card"><a className="brand auth-brand" href="#login"><span className="brand-mark">G</span><span>GOSH <span className="brand-light">COLD STORE</span><small>INVENTORY & OPERATIONS</small></span></a><span className="eyebrow">ACCRA · COLD STORE</span><h1>{authStatus === 'setup' ? 'Set up your store' : 'Welcome back'}</h1><p className="auth-subtitle">{authStatus === 'setup' ? 'Create the first administrator account to secure your inventory.' : 'Sign in to manage your store inventory.'}</p><form action={(data) => void authenticate(data)}>{authStatus === 'setup' && <label>Your name<input name="name" autoComplete="name" required minLength={2} placeholder="Store administrator" /></label>}<label>Email address<input name="email" type="email" autoComplete="username" required placeholder="you@yourstore.com" /></label><label>Password<input name="password" type="password" autoComplete={authStatus === 'setup' ? 'new-password' : 'current-password'} minLength={authStatus === 'setup' ? 10 : 1} required placeholder={authStatus === 'setup' ? 'At least 10 characters' : 'Your password'} /></label>{authError && <p className="auth-error" role="alert">{authError}</p>}<button className="button button-primary auth-submit" type="submit" disabled={isAuthenticating}>{isAuthenticating ? <><span className="auth-spinner" aria-hidden="true" />{authStatus === 'setup' ? 'Creating your account…' : 'Signing you in…'}</> : <>{authStatus === 'setup' ? 'Create administrator' : 'Sign in'} <span>→</span></>}</button></form></section><p className="auth-footer">© {new Date().getFullYear()} Gosh Cold Store. All rights reserved.</p></main>
 
   async function submitProduct(formData: FormData) {
     const name = String(formData.get('name') || '').trim()
