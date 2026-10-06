@@ -14,6 +14,46 @@
   color: #a64339;
 }
 
+.password-field {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+}
+
+.auth-card .password-field input {
+  width: 100%;
+  min-width: 0;
+  padding-right: 76px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 5px;
+  display: inline-flex;
+  min-width: 62px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #53685d;
+  font: 600 11px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  background: #eef4f0;
+  color: #176d51;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid #69a98a;
+  outline-offset: 1px;
+}
+
 .auth-spinner {
   width: 14px;
   height: 14px;
