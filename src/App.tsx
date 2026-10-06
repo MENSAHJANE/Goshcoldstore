@@ -365,6 +365,7 @@ function App() {
         <div className="sidebar-spacer" />
         <div className="sidebar-help"><span className="help-symbol">?</span><span><strong>Need a hand?</strong><small>Visit the help center</small></span><span className="chevron">↗</span></div>
         <button className="profile" onClick={preview ? () => setRole(role === 'Admin' ? 'Shop Attendant' : 'Admin') : () => setModal('password')} aria-label={preview ? 'Switch preview role' : 'Change password'}><span className="profile-avatar">{user ? user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() : 'AM'}</span><span><strong>{user?.name || 'Sample account'}</strong><small>{preview ? `${currentRole} · Preview` : `${currentRole} · Account`}</small></span><span className="chevron">{preview ? '···' : '⚙'}</span></button>
+        <button className="mobile-signout" onClick={signOut} aria-label="Sign out"><span aria-hidden="true">↪</span><span>Sign out</span></button>
       </aside>
 
       <main className="main-panel">

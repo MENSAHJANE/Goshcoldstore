@@ -1,3 +1,7 @@
+ .mobile-signout {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -11,7 +15,7 @@
     z-index: 15;
     width: 100%;
     height: calc(66px + env(safe-area-inset-bottom));
-    padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
+    padding: 5px 74px calc(5px + env(safe-area-inset-bottom)) 6px;
     flex-direction: row;
     align-items: center;
     gap: 3px;
@@ -47,6 +51,40 @@
 
   .sidebar .profile > span:not(.profile-avatar) {
     display: none;
+  }
+
+  .mobile-signout {
+    position: fixed;
+    right: 7px;
+    bottom: calc(6px + env(safe-area-inset-bottom));
+    z-index: 18;
+    display: flex;
+    width: 62px;
+    height: 54px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid #e8bdb6;
+    border-radius: 5px;
+    background: #fff0ed;
+    color: #a64339;
+    font: 700 9px/1.1 'DM Sans', sans-serif;
+    cursor: pointer;
+    box-shadow: 0 2px 8px #57302c1c;
+  }
+
+  .mobile-signout:hover,
+  .mobile-signout:active {
+    border-color: #bd756b;
+    background: #fbe2de;
+    color: #842e26;
+  }
+
+  .mobile-signout > span:first-child {
+    font-size: 19px;
+    line-height: 1;
   }
 
   .primary-nav {
